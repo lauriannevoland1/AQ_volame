@@ -1,0 +1,207 @@
+---
+title: "R_Growth"
+output: html_document
+date: "2023-10-18"
+---
+
+```{r}
+library(readxl)
+library(readxl)
+DOA_growth <- read_excel("Growth/DOA_growth.xlsx")
+View(DOA_growth)
+```
+
+```{r}
+DOA_growth$Time<- as.character(DOA_growth$Time)
+ggplot(data=DOA_growth, aes(x=Time, y=Poids, group=Groups)) +
+  geom_line(aes(color=Groups)) + theme_classic()
+
+ggline(DOA_growth, x = "Time", y = "Poids",color = "Groups", add = "mean_se") 
+```
+
+```{r}
+#Outliers
+DOA_growth %>%
+  group_by(Time, Groups) %>%
+  identify_outliers(Poids)
+
+# Normality 
+ggplot (data = DOA_growth, aes (sample = Poids)) +
+  stat_qq ()
+DOA_growth %>%
+  group_by(Groups) %>%
+  shapiro_test(Poids)
+
+DOA_growth$Time <- as.character(DOA_growth$Time )
+##Createqqplot for each cell of design
+ggqqplot(DOA_growth, "Poids", facet.by = "Lot_x_Time")
+```
+There were some extreme outliers.
+The  score wasn't normally distributed at each time point, as assessed by Shapiro-Wilk’s test (p < 0.05). BUT qqplot ok 
+
+
+Modèles linéaires généralisés à effets mixtes : 
+https://pmarchand1.github.io/ECL8202/notes_cours/05-Modeles_generalises_mixtes.html#mod%C3%A8les_lin%C3%A9aires_g%C3%A9n%C3%A9ralis%C3%A9s_%C3%A0_effets_mixtes
+Le package lme4 contient une fonction glmer pour estimer les paramètres d’un GLMM. Celle-ci est semblable à lmer, excepté qu’on spécifie la distribution non-normale de la réponse par le biais du paramètre family
+
+
+MODEL MIXTE: 
+```{r}
+library(lme4)
+library(lmerTest)
+#https://www.nathalievialaneix.eu/doc/html/guidelines_modele_mixte.html#mod%C3%A8le_mixte
+
+# estimation du modèle
+mod_lmer_REML <- lmerTest::lmer(Poids ~ Groups * Time + (1|Veau), data = DOA_growth) # par défaut méthode REML
+
+# ajustement pour l'estimation des effets fixes
+mod_lmer_ML <- update(mod_lmer_REML, REML=FALSE)
+
+lme4::VarCorr(mod_lmer_REML)
+lme4::VarCorr(mod_lmer_ML)
+car::Anova(mod_lmer_ML, type = "III")
+```
+# type "II" par défaut mais ne doit être utilisé que si les effectifs sont équilibrés
+
+Test de l’intérêt de l’addition d’un effet aléatoire sur l’intercept
+
+```{r}
+# modele mixte avec effets fixes et subject en aléatoire sur l'intercept
+# estimation du modèle
+mod_lmer_REML <- lmerTest::lmer(Poids ~ Groups * Time + (1|Veau), data = Poids) # par défaut methode REML
+# ajustement pour l'estimation des effets fixes
+mod_lmer_ML <- update(mod_lmer_REML, REML=FALSE)
+# Anova
+mod_lm <- lm(Poids ~  Groups * Time , data = Poids)
+
+anova(mod_lmer_ML, mod_lm)
+```
+
+L’effet aléatoire apporte une plus-value significative dans le modèle d’estimation
+
+
+Test de l’intérêt de l’effet fixe par rapport à l’aléatoire seul
+```{r}
+# modèle avec l'effet aleatoire seul
+mod_lmer_REML_ssfixe <- lmerTest::lmer(Poids ~ 1 + (1|Veau), data = Poids) 
+mod_lmer_ML_ssfixe <- update(mod_lmer_REML_ssfixe, REML = FALSE) 
+
+# modèle mixte avec effets fixes et subject en aléatoire sur l'intercept
+mod_lmer_REML_intercept <- lmerTest::lmer(Poids ~ Groups * Time + (1|Veau), data = Poids)
+mod_lmer_ML_intercept<-update(mod_lmer_REML_intercept, REML = FALSE)
+
+anova(mod_lmer_ML_ssfixe, mod_lmer_ML_intercept)
+```
+
+Les effets fixes améliorent l’ajustement du modèle
+
+
+
+Modèle pour corriger l’intercept et la pente
+
+
+```{r}
+# modèle intercept
+mod_lmer_REML_intercept <- lmerTest::lmer(Moyenne_Conc_IgG ~ lot * Date_samples + (1|N_Agneau), data = igg)
+mod_lmer_ML_intercept <- update(mod_lmer_REML_intercept, REML = FALSE)
+
+# modèle intercept + pente
+mod_lmer_REML_intercept_pente <- lmerTest::lmer(Moyenne_Conc_IgG ~ lot * Date_samples + (1+Date_samples|N_Agneau), data = igg)
+mod_lmer_ML_intercept_pente <- update(mod_lmer_REML_intercept_pente, REML = FALSE)
+
+anova(mod_lmer_ML_intercept, mod_lmer_ML_intercept_pente)
+```
+
+
+```{r}
+criterLM <- c(AIC = AIC(mod_lm), BIC = BIC(mod_lm))
+criterLMER_ssfixe <- c(AIC = AIC(mod_lmer_ML_ssfixe), BIC = BIC(mod_lmer_ML_ssfixe))
+criterLMER_intercept <- c(AIC = AIC(mod_lmer_ML_intercept), BIC = BIC(mod_lmer_ML_intercept))
+rbind(criterLM, criterLMER_ssfixe, criterLMER_intercept)
+```
+Plus la valeur est basse, meilleur est l’ajustement. Ici, le modèle permettant le meilleur ajustement est le modèle mod_lmer_ML_intercept
+
+```{r}
+mod_lmer_REML <- lmerTest::lmer(Poids ~ Time * Groups + (1|Veau), data = Poids)
+mod_lmer_ML <- update(mod_lmer_REML, REML=FALSE)
+car::Anova(mod_lmer_ML, type= "III")
+```
+
+Tests Post-Hoc
+
+```{r}
+library(emmeans)
+library(multcomp)
+lsmeans(mod_lmer_ML,pairwise ~ Time|Groups)
+lsmeans(mod_lmer_ML,pairwise ~ Groups|Time)
+```
+
+```{r}
+library(emmeans)
+library(lmerTest)
+# test de l'effet age intra sexe
+CLD(emmeans::lsmeans(mod_lmer_ML,pairwise ~ Date_samples|lot),Letters = letters)
+
+test<-lmerTest::lsmeansLT(mod_lmer_ML, test.effs = "Date_samples:lot")
+```
+
+
+Found distribution data
+
+```{r}
+library(lme4)
+library(palmerpenguins)
+distrib_mass <- ggplot(DOA_growth)+
+  geom_density(aes(x=Poids), fill="darkorchid4", color="darkgray")+
+  geom_vline(aes(xintercept=mean(Poids, na.rm = T)), color="black", size=0.4, linetype="dashed" )+
+  theme_light()
+distrib_mass
+```
+
+
+
+```{r}
+X.omit <-na.omit(DOA_growth$Poids)
+X.omit <-as.numeric(X.omit)
+
+library(fitdistrplus)
+library(logspline)
+descdist(data= X.omit,discrete=FALSE)
+descdist(data= X.omit,discrete=FALSE, boot=1000)
+
+descdist(data= X.omit,discrete=T)
+descdist(data= X.omit,discrete=T, boot=1000)
+```
+```{r}
+library(fitur)
+library(actuar)
+fitur::fit_dist_addin()
+```
+
+-> gamma ! 
+
+```{r}
+library(moments)
+skewness(DOA_growth$Poids, na.rm = TRUE)
+```
+Plus la valeur de l’asymétrie est élevée, plus la distribution diffère d’une distribution normale. 
+La direction de l’asymétrie est donnée par le signe du coefficient d’asymétrie:
+
+Un zéro signifie aucune asymétrie du tout (distribution normale).
+Une valeur négative signifie que la distribution est négativement asymétrique.
+Une valeur positive signifie que la distribution est positivement asymétrique.
+
+```{r}
+library(lme4)
+library(lattice)
+library(gridExtra)
+
+#incerse gamma
+fit.glmm <- glmer(Poids ~ Time*Lot +(1 | Veau),
+  data = DOA_growth,
+  family = Gamma
+)
+fit.glmm
+fixef(fit.glmm)
+```
+
