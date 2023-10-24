@@ -1,0 +1,57 @@
+---
+title: "AQ_volame_AQ1224_clinical_disorder"
+output: html_document
+date: "2023-01-30"
+---
+
+setwd("Z:/DINAMIC/Echanges_nontit/Laurianne_Voland/AQ_Volame/AQ_Volame_Health")
+
+### I- Library and data 
+```{r setup, include=FALSE}
+library(tidyverse)
+library(ggpubr)
+library(rstatix)
+library(readxl)
+
+CD<- read_excel("Health/DOA_disorders.xlsx")
+View(CD)
+```
+
+
+```{r}
+table(CD$Time,CD$LOT,CD$Respiratoire)
+table(CD$Time,CD$LOT,CD$Diarrhees)
+```
+
+
+# CHI
+```{r}
+stu_data = data.frame(CD$Lot_x_Time, CD$Diarrhees) 
+stu_data = table(CD$Lot_x_Time, CD$Diarrhees)
+print(chisq.test(stu_data)) 
+
+stu_data_R = data.frame(CD$Lot_x_Time, CD$Respiratoire) 
+stu_data_R = table(CD$Lot_x_Time, CD$Respiratoire)
+print(chisq.test(stu_data_R)) 
+```
+Lot * Time  p = 0.003272 
+
+
+Analysis of binary repeated measures data with R : For outcomes that are binary a linear model is not reasonable since the mean is constrained to the [0; 1]-interval.
+Instead we use logistic regression to model the log-odds of an outcome as dependent on covariates
+
+```{r setup, include=FALSE}
+#multivariable regression 
+hoops=glmer(Diarrhees~Lot*Time+(1|EDE),family=binomial,data=CD)
+Anova(hoops, type="III") # Each effect controlled for all others
+
+hoops_respi=glmer(Respiratoire~Lot*Time+(1|EDE),family=binomial,data=CD)
+Anova(hoops_respi, type="III") # Each effect controlled for all others
+
+# Because the interaction is significant but close, try a likelihood ratio test
+# Fit a model with main effects but no interaction, and compare
+restrictedmodel = glmer(Diarrhees ~ Lot+Time + (1 | EDE), family=binomial, data=CD)
+anova(restrictedmodel,hoops)
+```
+
+NS
