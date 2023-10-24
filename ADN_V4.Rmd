@@ -1,0 +1,1250 @@
+---
+title: "Untitled"
+output: html_document
+date: "2023-09-12"
+---
+
+sET DIRECTOTY 
+setwd("Z:/DINAMIC/Echanges_nontit/Laurianne_Voland/AQ_Volame/AQ_Volame_AQ1224_ADN_AGV/AQ1224_ADN")
+
+#I-Installe Qiime2R
+```{r}
+install.packages("remotes")
+remotes::install_github("jbisanz/qiime2R")
+
+if (!requireNamespace("BiocManager", quietly = TRUE)) install.packages("BiocManager")
+BiocManager::install(c("phyloseq", "microbiome", "ComplexHeatmap"), update = FALSE)
+
+install.packages(
+  "microViz",
+  repos = c(davidbarnett = "https://david-barnett.r-universe.dev", getOption("repos"))
+)
+
+install.packages("picante")
+
+install.packages("devtools")
+devtools::install_github("ggloor/ALDEx_bioc")
+
+library(BiocManager)
+BiocManager::install("microbiome")
+```
+
+https://www.nicholas-ollberding.com/post/introduction-to-the-statistical-analysis-of-microbiome-data-in-r/
+##II- Package libraries
+
+```{r}
+library(qiime2R)
+library(dplyr)
+library(tidyr)
+library(phyloseq)
+library(microViz)
+library(tidyverse)
+library(microbiome)
+library(vegan)
+library(picante)
+library(ALDEx2)
+library(ggplot2)
+library(dendextend)
+library(MicrobiotaProcess)
+```
+
+
+## II- Object Phyloseq to data qiime2
+```{r}
+##CREATING A PHYLOSEQ OBJECT AND PREPARING DATA
+physeq<-qza_to_phyloseq(
+  features="table.qza",
+  taxonomy="Taxnomy.qza",
+  metadata = "mapping_Laurianne.tsv")
+physeq
+
+#WE WILL ADD THE ROOTED TREE THEN BECAUSE IS MORE EASY TO JOINT IT AFTER PRE-TREATMENT DATA
+TREE_ROOT<- qza_to_phyloseq(
+  tree="rooted-tree.qza"
+)
+TREE_ROOT
+
+#VALIDATION DATA FROM PHYLOSEQ OBJECT (MICROVIZ PACKAGE)
+physeq <- phyloseq_validate(physeq, remove_undetected = TRUE)
+#> Short values detected in phyloseq tax_table (nchar<4) :
+#> Consider using tax_fix() to make taxa uniquely identifiable
+physeq <- tax_fix(physeq)
+physeq
+```
+
+nb OTU : 9243
+
+##PRE-TREATMENT DATA
+```{r}
+###SORTING SAMPLES ON TOTAL READ COUNT 
+sort(phyloseq::sample_sums(physeq)) 
+###REMOVE SAMPLES < 7000 READS
+(physeq <- phyloseq::subset_samples(physeq, phyloseq::sample_sums(physeq) > 8000)) 
+
+(physeq <- phyloseq::prune_taxa(phyloseq::taxa_sums(physeq) > 0, physeq)) 
+
+###SELECTING DATA FROM SAMPLING TYPE VARIABLE "abattoir" AND SPLITTING GROUP (example, Abattoir, NEGATIF_HERBE_A)
+samdat_tbl(physeq)
+####SELECT THE SAMPLES OF THE EXPERIMENT (DISCARTING NEGATIVE CONTROL AND MOCK) : RUMEN
+PS_SAMPLES <- physeq %>% 
+  ps_filter(
+    Localisation == "rumen"
+  )
+PS_SAMPLES
+sort(phyloseq::sample_sums(PS_SAMPLES)) 
+
+####SELECT THE SAMPLES OF THE EXPERIMENT (DISCARTING NEGATIVE CONTROL AND MOCK) : FECES
+PS_SAMPLES_feces <- physeq %>% 
+  ps_filter(
+    Localisation == "feces"
+  )
+```
+
+```{r}
+###MERGING THE SPLIT GROUPS IN ONE PHYLOSEQ OBJECT AND ADDING THE ROOT TREE
+GP_ALL_TREE<- merge_phyloseq(PS_SAMPLES, TREE_ROOT)
+GP_ALL_TREE <- prune_samples(sample_names(GP_ALL_TREE) !="19LIB028-19MET530",GP_ALL_TREE)
+GP_ALL_TREE <- prune_samples(sample_names(GP_ALL_TREE) !="19LIB028-19MET515",GP_ALL_TREE)
+samdat_tbl(GP_ALL_TREE)
+
+#NOW WE SELECT SAMPLES ACCORDING EAND SERIE
+PS_pan_3 <- physeq %>% 
+  ps_filter(
+    Lot == "panache",
+    Time_cat %in% c("3"),
+    MockAndDuplicates == "no"
+  )
+
+PS_pan_10 <- physeq %>% 
+  ps_filter(
+    Lot == "panache",
+    Time_cat %in% c("10"),
+    MockAndDuplicates == "no"
+  )
+
+PS_pan_13 <- physeq %>% 
+  ps_filter(
+    Lot == "panache",
+    Time_cat %in% c("13"),
+    MockAndDuplicates == "no"
+  )
+PS_pan_20 <- physeq %>% 
+  ps_filter(
+    Lot == "panache",
+    Time_cat %in% c("20"),
+    MockAndDuplicates == "no"
+  )
+
+
+PS_D_3 <- physeq %>% 
+  ps_filter(
+    Lot == "mere",
+    Time_cat %in% c("3"),
+    MockAndDuplicates == "no"
+  )
+
+PS_D_10 <- physeq %>% 
+  ps_filter(
+    Lot == "mere",
+    Time_cat %in% c("10"),
+    MockAndDuplicates == "no"
+  )
+
+PS_D_13 <- physeq %>% 
+  ps_filter(
+    Lot == "mere",
+    Time_cat %in% c("13"),
+    MockAndDuplicates == "no"
+  )
+PS_D_20 <- physeq %>% 
+  ps_filter(
+    Lot == "mere",
+    Time_cat %in% c("20"),
+    MockAndDuplicates == "no"
+  )
+
+
+
+PS_T_3 <- physeq %>% 
+  ps_filter(
+    Lot == "temoin",
+    Time_cat %in% c("3"),
+    MockAndDuplicates == "no"
+  )
+
+PS_T_10 <- physeq %>% 
+  ps_filter(
+    Lot == "temoin",
+    Time_cat %in% c("10"),
+    MockAndDuplicates == "no"
+  )
+
+PS_T_13 <- physeq %>% 
+  ps_filter(
+    Lot == "temoin",
+    Time_cat %in% c("13"),
+    MockAndDuplicates == "no"
+  )
+PS_T_20 <- physeq %>% 
+  ps_filter(
+    Lot == "temoin",
+    Time_cat %in% c("20"),
+    MockAndDuplicates == "no"
+    
+  )
+
+```
+
+
+```{r}
+###APPLYING FUNCTON TO REMOVE TAXA NOT SEEM MORE THAN 3 TIMES IN AT LEAST 25% OF THE SAMPLES. 
+PS_pan_3 <- filter_taxa(PS_pan_3, function(x) sum(x > 3) > (0.33*length(x)), TRUE) 
+PS_pan_3
+
+PS_pan_10 <- filter_taxa(PS_pan_10, function(x) sum(x > 3) > (0.33*length(x)), TRUE) 
+PS_pan_10
+
+PS_pan_13 <- filter_taxa(PS_pan_13, function(x) sum(x > 3) > (0.33*length(x)), TRUE) 
+PS_pan_13
+
+PS_pan_20 <- filter_taxa(PS_pan_20, function(x) sum(x > 3) > (0.33*length(x)), TRUE) 
+PS_pan_20
+
+PS_D_3 <- filter_taxa(PS_D_3, function(x) sum(x > 3) > (0.33*length(x)), TRUE) 
+PS_D_3
+
+PS_D_10 <- filter_taxa(PS_D_10, function(x) sum(x > 3) > (0.33*length(x)), TRUE) 
+PS_D_10
+
+PS_D_13 <- filter_taxa(PS_D_13, function(x) sum(x > 3) > (0.33*length(x)), TRUE) 
+PS_D_13
+
+PS_D_20 <- filter_taxa(PS_D_20, function(x) sum(x > 3) > (0.33*length(x)), TRUE) 
+PS_D_20
+
+PS_T_3 <- filter_taxa(PS_T_3, function(x) sum(x > 3) > (0.33*length(x)), TRUE) 
+PS_T_3
+
+PS_T_10 <- filter_taxa(PS_T_10, function(x) sum(x > 3) > (0.33*length(x)), TRUE) 
+PS_T_10
+
+PS_T_13 <- filter_taxa(PS_T_13, function(x) sum(x > 3) > (0.33*length(x)), TRUE) #IS 0.33 BEACAUSE WE HAVE JUST 3 SAMPLES IN THIS GROUP
+PS_T_13
+
+PS_T_20 <- filter_taxa(PS_T_20, function(x) sum(x > 3) > (0.33*length(x)), TRUE) 
+PS_T_20
+
+
+
+GP_ALL <- merge_phyloseq(PS_pan_3, PS_pan_10, PS_pan_13, PS_pan_20, PS_D_3, PS_D_10, PS_D_13, PS_D_20, PS_T_3, PS_T_10,PS_T_13,PS_T_20)
+GP_ALL
+
+samdat_tbl(GP_ALL)
+
+```
+
+```{r}
+###MERGING THE SPLIT GROUPS IN ONE PHYLOSEQ OBJECT AND ADDING THE ROOT TREE
+GP_ALL_TREE<- merge_phyloseq(GP_ALL, TREE_ROOT)
+GP_ALL_TREE
+samdat_tbl(GP_ALL_TREE)
+
+GP_ALL_TREE <- GP_ALL_TREE %>% 
+  ps_filter(
+    Localisation == "rumen",
+    MockAndDuplicates == "no"
+    
+  )
+samdat_tbl(GP_ALL_TREE)
+
+```
+
+```{r}
+###CONVERTING TO RELATIVE ABUNDANCE
+GP_RELATIVE <- phyloseq::transform_sample_counts(GP_ALL_TREE, function(x){x / sum(x)})
+GP_RELATIVE
+
+phyloseq::otu_table(GP_RELATIVE)[1:5, 1:5]
+```
+
+```{r}
+###Visualizing relative abundance
+####Get count of phyla
+table(phyloseq::tax_table(GP_RELATIVE)[, "Phylum"])
+```
+
+```{r}
+##Table for abundance Phylum
+(PS_Phylum_RELATIVE <- tax_glom(GP_RELATIVE, "Phylum"))
+taxa_names(PS_Phylum_RELATIVE)
+taxa_names(PS_Phylum_RELATIVE) <- tax_table(PS_Phylum_RELATIVE)[, 7]
+taxa_names(PS_Phylum_RELATIVE)
+otu_table(PS_Phylum_RELATIVE)
+PS_Phylum_RELATIVE
+
+##PUT YOU OBJECT "PS_Phylum_RELATIVE" TO EXPORT AS A DATA FRAME OBJECT 
+phyloseq::otu_table(PS_Phylum_RELATIVE) %>%
+  as.data.frame() %>%
+  rownames_to_column("id") %>%
+  left_join(phyloseq::tax_table(PS_Phylum_RELATIVE)%>%as.data.frame()%>%
+              rownames_to_column("id")) -> phyloseq_biom
+
+write.csv(phyloseq_biom, file = "PS_PHYLUM_RUMEN_2.csv")
+```
+
+```{r}
+##Table for abundance Genus
+(PS_Family_RELATIVE <- tax_glom(GP_RELATIVE, "Genus"))
+taxa_names(PS_Family_RELATIVE)
+taxa_names(PS_Family_RELATIVE) <- tax_table(PS_Family_RELATIVE)[, 7]
+taxa_names(PS_Family_RELATIVE)
+otu_table(PS_Family_RELATIVE)
+PS_Family_RELATIVE
+
+##PUT YOU OBJECT "PS_FAMOLY_HERBE" TO EXPORT AS A DATA FRAME OBJECT 
+phyloseq::otu_table(PS_Family_RELATIVE) %>%
+  as.data.frame() %>%
+  rownames_to_column("id") %>%
+  left_join(phyloseq::tax_table(PS_Family_RELATIVE)%>%as.data.frame()%>%
+              rownames_to_column("id")) -> phyloseq_biom
+
+write.csv(phyloseq_biom, file = "PS_GENUS_RUMEN_2.csv")
+
+##Table for abundance Genus
+(PS_Family_RELATIVE <- tax_glom(GP_RELATIVE, "Kingdom"))
+taxa_names(PS_Family_RELATIVE)
+taxa_names(PS_Family_RELATIVE) <- tax_table(PS_Family_RELATIVE)[, 7]
+taxa_names(PS_Family_RELATIVE)
+otu_table(PS_Family_RELATIVE)
+PS_Family_RELATIVE
+
+##PUT YOU OBJECT "PS_FAMOLY_HERBE" TO EXPORT AS A DATA FRAME OBJECT 
+phyloseq::otu_table(PS_Family_RELATIVE) %>%
+  as.data.frame() %>%
+  rownames_to_column("id") %>%
+  left_join(phyloseq::tax_table(PS_Family_RELATIVE)%>%as.data.frame()%>%
+              rownames_to_column("id")) -> phyloseq_biom
+
+write.csv(phyloseq_biom, file = "PS_Kingdom_RUMEN_2.csv")
+```
+
+
+```{r}
+##Table for count Genus
+(PS_GP_ALL_TREEE <- tax_glom(GP_ALL_TREE, "Genus"))
+taxa_names(PS_GP_ALL_TREEE)
+taxa_names(PS_GP_ALL_TREEE) <- tax_table(PS_GP_ALL_TREEE)[, 6]
+taxa_names(PS_GP_ALL_TREEE)
+otu_table(PS_GP_ALL_TREEE)
+PS_GP_ALL_TREEE
+
+##PUT YOU OBJECT "PS_FAMOLY_HERBE" TO EXPORT AS A DATA FRAME OBJECT 
+phyloseq::otu_table(PS_GP_ALL_TREEE) %>%
+  as.data.frame() %>%
+  rownames_to_column("id") %>%
+  left_join(phyloseq::tax_table(PS_GP_ALL_TREEE)%>%as.data.frame()%>%
+              rownames_to_column("id")) -> phyloseq_biom
+
+write.csv(phyloseq_biom, file = "Count_Genus_RUMEN_VF_Test2.csv") 
+
+##Table for count Phylum
+(PS_GP_ALL_TREEE <- tax_glom(GP_ALL_TREE, "Phylum"))
+taxa_names(PS_GP_ALL_TREEE)
+taxa_names(PS_GP_ALL_TREEE) <- tax_table(PS_GP_ALL_TREEE)[, 6]
+taxa_names(PS_GP_ALL_TREEE)
+otu_table(PS_GP_ALL_TREEE)
+PS_GP_ALL_TREEE
+
+##PUT YOU OBJECT "PS_FAMOLY_HERBE" TO EXPORT AS A DATA FRAME OBJECT 
+phyloseq::otu_table(PS_GP_ALL_TREEE) %>%
+  as.data.frame() %>%
+  rownames_to_column("id") %>%
+  left_join(phyloseq::tax_table(PS_GP_ALL_TREEE)%>%as.data.frame()%>%
+              rownames_to_column("id")) -> phyloseq_biom
+
+write.csv(phyloseq_biom, file = "Count_GPhylum_RUMEN_VF.csv") 
+```
+
+
+
+
+```{r}
+##Table for abundance Genus
+(PS_Genus_RELATIVE <- tax_glom(GP_RELATIVE, "Genus"))
+taxa_names(PS_Genus_RELATIVE)
+taxa_names(PS_Genus_RELATIVE) <- tax_table(PS_Genus_RELATIVE)[, 6]
+taxa_names(PS_Genus_RELATIVE)
+otu_table(PS_Genus_RELATIVE)
+PS_Genus_RELATIVE
+
+##PUT YOU OBJECT "PS_FAMOLY_HERBE" TO EXPORT AS A DATA FRAME OBJECT 
+phyloseq::otu_table(PS_Genus_RELATIVE) %>%
+  as.data.frame() %>%
+  rownames_to_column("id") %>%
+  left_join(phyloseq::tax_table(PS_Genus_RELATIVE)%>%as.data.frame()%>%
+              rownames_to_column("id")) -> phyloseq_biom
+
+write.csv(phyloseq_biom, file = "ASV_genus_relative2.csv") 
+```
+
+```{r}
+####Plot
+phyloseq::plot_bar(GP_RELATIVE, fill = "Phylum") +
+  geom_bar(aes(color = Phylum, fill = Phylum), stat = "identity", position = "stack") +
+  labs(x = "", y = "Relative Abundance\n") +
+  facet_wrap(~ Lot+Time_cat, scales = "free") +
+  theme(panel.background = element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank())
+```
+
+
+```{r}
+####Improving visualization
+###Agglomerate to phylum-level and rename
+physeq_phylum <- phyloseq::tax_glom(GP_ALL_TREE, "Phylum")
+phyloseq::taxa_names(physeq_phylum) <- phyloseq::tax_table(physeq_phylum)[, "Phylum"]
+phyloseq::otu_table(physeq_phylum)[1:5, 1:5]
+```
+
+```{r}
+####Melt and plot
+phyloseq::psmelt(physeq_phylum) %>%
+  ggplot(data = ., aes(x = Lot, y = Abundance)) +
+  geom_boxplot(outlier.shape  = NA) +
+  geom_jitter(aes(color = OTU), height = 0, width = .2) +
+  labs(x = "", y = "Abundance\n") +
+  facet_wrap(~ OTU+Time_cat, scales = "free")
+```
+
+```{r}
+#Hierarchical clustering
+##Extracting OTU table and compute Bray Curtis
+GP_REL_OTU <- data.frame(phyloseq::otu_table(GP_RELATIVE))
+GP_REL_OTU <- t(GP_REL_OTU)
+bc_distance <- vegan::vegdist(GP_REL_OTU, method = "bray")
+as.matrix(bc_distance)[1:5, 1:5]
+##Save as dendrogram
+ward <- as.dendrogram(hclust(bc_distance, method = "ward.D2"))
+##Provide color codes
+meta <- data.frame(phyloseq::sample_data(GP_RELATIVE))
+colorCode <- c(temoin_3 = "red", panache_3 = "blue",mere_3= "orange",temoin_10 = "red", panache_10 = "blue",mere_10="orange",temoin_13 = "red", panache_13 = "blue",mere_13="orange",temoin_20 = "red", panache_20 = "blue",mere_20="orange")
+labels_colors(ward) <- colorCode[meta$Lot_x_Time][order.dendrogram(ward)]
+##Plot
+plot(ward)
+```
+
+
+### III- Alpha diverisy
+
+
+Alpha-diversity is the diversity in a single ecosystem or sample. The simplest measure is richness, the number of species (or OTUs) observed in the sample. Other metrics consider the abundances (frequencies) of the OTUs, for example to give lower weight to lower-abundance OTUs
+
+Alpha diversity, also sometimes interchangeably used with the term species diversity, summarizes the distribution of species abundances in a given sample into a single number that depends on species richness and evenness. Diversity indices measure the overall community heterogeneity. A number of ecological diversity measures are available. The Hill coefficient combines many standard indices into a single equation that provides observed richness, inverse Simpson, and Shannon diversity, and generalized diversity as special cases. In general, diversity increases together with increasing richness and evenness. Sometimes richness, evenness, and dominance are considered to be variants of alpha diversity.( https://microbiome.github.io/OMA/microbiome-diversity.html)
+
+Simpson's Index (D) measures the probability that two individuals randomly selected from a sample will belong to the same species (or some category other than species). There are two versions of the formula for calculating D. Either is acceptable, but be consistent. ( here almost p=1 )
+
+
+```{r}
+ggplot(data = data.frame("total_reads" =  phyloseq::sample_sums(GP_ALL_TREE),
+                         "observed" = phyloseq::estimate_richness(GP_ALL_TREE, measures = "Observed")[, 1]),
+       aes(x = total_reads, y = observed)) +
+  geom_point() +
+  geom_smooth(method="lm", se = FALSE) +
+  labs(x = "\nTotal Reads", y = "Observed Richness\n")
+```
+
+
+```{r}
+##Now let’s subsample, plot, and test for group differences.
+##Subsample reads
+set.seed(123)
+(GP_rare <- phyloseq::rarefy_even_depth(GP_ALL_TREE, rngseed = 123, replace = FALSE))             
+
+head(phyloseq::sample_sums(GP_rare))
+```
+
+
+
+Rafreaction : 6531
+
+```{r}
+##Generate a data.frame with alfa diveristy  measures
+adiv <- data.frame(
+  "Observed" = phyloseq::estimate_richness(GP_rare, measures = "Observed"),
+  "Shannon" = phyloseq::estimate_richness(GP_rare, measures = "Shannon"),
+  "Simpson" = phyloseq::estimate_richness(GP_rare, measures = "Simpson"),
+  "PD" = picante::pd(samp = data.frame(t(data.frame(phyloseq::otu_table(GP_rare)))), tree = phyloseq::phy_tree(GP_rare))[, 1],
+  "Lot"= phyloseq::sample_data(GP_rare)$Lot,
+  "Time"= phyloseq::sample_data(GP_rare)$Time_num,
+  "Lot_x_Time"=phyloseq::sample_data(GP_rare)$Lot_x_Time)
+
+view(adiv)
+##Plot alpha diversity measures
+adiv %>%
+  gather(key = metric, value = value, c("Observed", "Shannon", "PD","Simpson")) %>%
+  mutate(metric = factor(metric, levels = c("Observed", "Shannon", "PD","Simpson"))) %>%
+  ggplot(aes(x = Time, y = value)) +
+  geom_boxplot(outlier.color = NA) +
+  geom_jitter(aes(color = Lot), height = 0, width = .2) +
+  labs(x = "", y = "") +
+  theme(legend.position="top")
+
+adiv$Time <- as.character(adiv$Time)
+
+ob_alpha <- ggplot(adiv, aes(x=factor(Time, level=c('3', '10', '13',"20")), y= Observed, fill=Lot)) + 
+    theme_classic() + geom_boxplot()+ xlab ("Weeks")
+Sh_alpha <- ggplot(adiv, aes(x=factor(Time, level=c('3', '10', '13',"20")), y= Shannon, fill=Lot)) + 
+     theme_classic()+ geom_boxplot() + xlab ("Weeks")
+PD_alpha <- ggplot(adiv, aes(x=factor(Time, level=c('3', '10', '13',"20")), y= PD, fill=Lot)) + 
+     theme_classic() + geom_boxplot() + xlab ("Weeks")
+SIM_alpha <- ggplot(adiv, aes(x=factor(Time, level=c('3', '10', '13',"20")), y= Simpson, fill=Lot)) + 
+     theme_classic() + geom_boxplot() + xlab ("Weeks")
+
+  
+ob_alpha
+Sh_alpha
+PD_alpha
+SIM_alpha
+
+cowplot::plot_grid(ob_alpha, Sh_alpha, PD_alpha,SIM_alpha, nrow = 2, ncol = 2, scale = .8)
+
+###Summarize
+SE_simp <- adiv %>%
+  group_by(Lot_x_Time) %>%
+  dplyr::summarise (Sim = mean(Simpson),sd = sd(Simpson), n=n(), se = sd / sqrt(n))
+SE_simp
+SE_Observed <- adiv %>%
+  group_by(Lot_x_Time) %>%
+  dplyr::summarise (Sim = mean(Observed),sd = sd(Observed), n=n(), se = sd / sqrt(n))
+SE_Observed
+SE_Shannon <- adiv %>%
+  group_by(Lot_x_Time) %>%
+  dplyr::summarise (Sim = mean(Shannon),sd = sd(Shannon), n=n(), se = sd / sqrt(n))
+SE_Shannon
+SE_PD <- adiv %>%
+  group_by(Lot_x_Time) %>%
+  dplyr::summarise (Sim = mean(PD),sd = sd(PD), n=n(), se = sd / sqrt(n))
+SE_PD
+```
+
+
+```{r}
+library(rstatix)
+#Outliers
+adiv %>%
+  group_by(Time, Lot) %>%
+  identify_outliers(Observed)
+
+# Normality 
+ggplot (data = adiv, aes (sample = Observed)) +
+  stat_qq ()
+adiv %>%
+  group_by(Lot, Time) %>%
+  shapiro_test(Observed)
+
+##Createqqplot for each cell of design
+library(ggpubr)
+ggqqplot(adiv, "Observed", ggtheme = theme_bw()) +
+  facet_grid(Time ~ Lot, labeller = "label_both")
+
+
+#Outliers
+adiv %>%
+  group_by(Time, Lot) %>%
+  identify_outliers(PD)
+
+# Normality 
+ggplot (data = adiv, aes (sample = PD)) +
+  stat_qq ()
+adiv %>%
+  group_by(Lot, Time) %>%
+  shapiro_test(PD)
+
+##Createqqplot for each cell of design
+ggqqplot(adiv, "PD", ggtheme = theme_bw()) +
+  facet_grid(Time ~ Lot, labeller = "label_both")
+```
+
+The score was OVERWALL normally distributed at each time point (p > 0.05), except for ctr treatment at t1, as assessed by Shapiro-Wilk’s test+ 
+La courbe n'est pas rectiligne,
+
+All groups overwall normal 
+Qqplot : ok 
+
+
+
+
+You can use different statistical tests in order to test if there is any significant differences between treatments: parametric tests (t-test and ANOVA) or non-parametric tests (Mann-Whitney and Kruskal-Wallis). Before using parametric tests, you need to make sure that you can use them (e.g. normal distribution, homoscedasticity).
+The Kruskal–Wallis test by ranks or one-way ANOVA on ranks is a non-parametric method for testing whether samples originate from the same distribution. It is used for comparing two or more independent samples of equal or different sample sizes. It extends the Mann–Whitney U test, which is used for comparing only two groups. The parametric equivalent of the Kruskal–Wallis test is the one-way analysis of variance (ANOVA).
+
+```{r}
+###Kurskall wallis test between groups
+kruskal.test(Observed ~ Time, data = adiv)
+kruskal.test(Shannon ~ Time, data = adiv)   
+kruskal.test(PD ~ Time, data = adiv)
+kruskal.test(Simpson ~ Time, data = adiv)
+
+kruskal.test(Observed ~ Lot, data = adiv)
+kruskal.test(Shannon ~ Lot, data = adiv)   
+kruskal.test(PD ~ Lot, data = adiv)
+kruskal.test(Simpson ~ Lot, data = adiv)
+
+kruskal.test(Observed ~ Lot_x_Time, data = adiv)
+kruskal.test(Shannon ~ Lot_x_Time, data = adiv)   
+kruskal.test(PD ~ Lot_x_Time, data = adiv)
+kruskal.test(Simpson ~ Lot_x_Time, data = adiv)
+
+#From the output of the Kruskal-Wallis test, we know that there is a significant difference between groups, but we don’t know which pairs of groups are different. A significant Kruskal-Wallis test is generally followed up by Dunn’s test to identify which groups are different. It’s also possible to use the Wilcoxon’s test to calculate pairwise comparisons between group levels with corrections for multiple testing.
+
+###Pairwise
+pairwise.wilcox.test(adiv$PD, adiv$Lot_x_Time,p.adjust.method = "BH")
+pairwise.wilcox.test(adiv$Observed, adiv$Lot_x_Time,p.adjust.method = "BH")
+pairwise.wilcox.test(adiv$Simpson , adiv$Lot_x_Time,p.adjust.method = "BH")
+pairwise.wilcox.test(adiv$Shannon, adiv$Lot_x_Time,p.adjust.method = "BH")
+```
+
+
+
+
+
+
+
+
+```{r}
+###Barplot
+#tax_fix_interactive(GP_RELATIVE_tax_fix)
+
+GP_RELATIVE_tax_fix <-GP_RELATIVE %>%
+ tax_fix(
+  min_length = 4,
+  unknowns = c("uncultured", "unidentified"),
+  sep = " ", anon_unique = TRUE,
+  suffix_rank = "classified"
+ )
+
+# Often to compare groups, average compositions are presented
+p1 <- phyloseq::merge_samples(GP_RELATIVE, group = "Lot_x_Time") %>%
+  comp_barplot(
+    tax_level = "Phylum", n_taxa = 30,
+    sample_order = c("mere_3", "temoin_3", "panache_3", "mere_10", "temoin_10", "panache_10","mere_13", "temoin_13", "panache_13", "mere_20", "temoin_20", "panache_20"),
+    bar_width = 0.8
+  ) + labs(x = NULL, y = "Mean Relative Abundance (%)")
+
+
+
+p2 <- phyloseq::merge_samples(GP_RELATIVE, group = "Lot_x_Time") %>%
+  comp_barplot(
+    tax_level = "Kingdom", n_taxa = 30,
+    sample_order = c("mere_3", "temoin_3", "panache_3", "mere_10", "temoin_10", "panache_10","mere_13", "temoin_13", "panache_13", "mere_20", "temoin_20", "panache_20"),
+    bar_width = 0.8
+  )  + labs(x = NULL, y = "Mean Relative Abundance (%)")
+
+
+
+p3 <- phyloseq::merge_samples(GP_RELATIVE_tax_fix, group = "Lot_x_Time") %>%
+  comp_barplot(
+    tax_level = "Genus", n_taxa = 30,
+    sample_order = c("mere_3", "temoin_3", "panache_3", "mere_10", "temoin_10", "panache_10","mere_13", "temoin_13", "panache_13", "mere_20", "temoin_20", "panache_20"),
+    bar_width = 0.8
+  )  + labs(x = NULL, y = "Mean Relative Abundance (%)")
+
+p1
+p2
+p3
+
+```
+
+
+
+
+
+La prévalence : 
+
+```{r}
+# Decocher les packages :  MicrobiotaProcess
+
+# Compute prevalence of each feature, store as data.frame
+prevdf <- apply(X = otu_table(GP_ALL_TREE),
+               MARGIN = ifelse(taxa_are_rows(GP_ALL_TREE), yes = 1, no = 2),
+               FUN = function(x){sum(x > 0)})
+# Add taxonomy and total read counts to this data.frame
+prevdf <- data.frame(Prevalence = prevdf,
+                    TotalAbundance = taxa_sums(GP_ALL_TREE),
+                    tax_table(GP_ALL_TREE))
+
+
+# Define phyla to filter
+filterPhyla <- c("p__Abditibacteriota")
+
+# Filter entries with unidentified Phylum.
+ps <- subset_taxa(GP_ALL_TREE, !Phylum %in% filterPhyla)
+ps
+# Subset to the remaining phyla
+prevdf1 <- subset(prevdf, Phylum %in% get_taxa_unique(ps, "Phylum"))
+
+# Plot
+ggplot(prevdf1, aes(TotalAbundance, Prevalence / nsamples(ps),color=Phylum)) +
+  # Include a guess for parameter
+  geom_point(size = 2, alpha = 0.7) +
+  geom_hline(yintercept = 0.05, alpha = 0.5, linetype = 2) +
+  scale_x_log10() +  xlab("Total Abundance") + ylab("Prevalence [Frac. Samples]") +
+  facet_wrap(~Phylum) + theme(legend.position="none")
+
+```
+Il y a bcp 
+-actino 
+_bacteriodetes
+-firmicute
+-proteobacteria
+_spirochaeta ..
+
+
+
+### IV- BETA DIVERSITY ANALYSIS
+
+Where alpha diversity focuses on community variation within a community (sample), beta diversity quantifies (dis-)similarites between communities (samples).
+```{r}
+#BETA DIVERSITY ANALYSIS
+##NORMALIZATION
+##CLR transform CENTERED LOG-RATIO
+(GP_CLR <- microbiome::transform(GP_ALL_TREE, "clr"))
+phyloseq::otu_table(GP_ALL_TREE)[1:5, 1:5]
+phyloseq::otu_table(GP_CLR)[1:5, 1:5]
+```
+
+```{r}
+##PCA via phyloseq
+ord_clr <- phyloseq::ordinate(GP_CLR, "RDA")
+##Plot scree plot
+phyloseq::plot_scree(ord_clr) + 
+  geom_bar(stat="identity", fill = "blue") +
+  labs(x = "\nAxis", y = "Proportion of Variance\n")
+##Examine eigenvalues and % prop. variance explained
+head(ord_clr$CA$eig)
+
+sapply(ord_clr$CA$eig[1:5], function(x) x / sum(ord_clr$CA$eig)) 
+```
+
+```{r}
+##Scale axes and plot ordination
+GP_ALL_TREE@sam_data$Time_cat <- as.character(GP_ALL_TREE@sam_data$Time_cat )
+clr1 <- ord_clr$CA$eig[1] / sum(ord_clr$CA$eig)
+clr2 <- ord_clr$CA$eig[2] / sum(ord_clr$CA$eig)
+PCA_PLOT<-phyloseq::plot_ordination(GP_ALL_TREE, ord_clr, type="samples", color="Time_cat", shape = "Lot") + 
+  geom_point(size = 2) +
+  coord_fixed(clr2 / clr1)
+  #stat_ellipse(aes(group = RFI_Diet_Year), linetype = 2)+
+  #ggtitle("ADONIS TEST \nDiet: R2=0.15, P<0.001 \nYear: R2=0.08, P<0.001 \nRFI: R2=0.04, P=0.045")
+
+#PCA_PLOT<- PCA_PLOT+scale_color_manual(labels = c("Grass silage", "Corn silage"), values = c("blue", "red"))
+PCA_PLOT + theme_classic()
+```
+
+```{r}
+#Improving plot quality
+tiff("pca_plot_global.tiff", units="in", width=7.5, height=6.5, res=600)
+# insert ggplot code
+PCA_PLOT
+dev.off()
+##Generate distance matrix
+clr_dist_matrix <- phyloseq::distance(GP_CLR, method = "euclidean") 
+##ADONIS test for diet, year and RFI effects, and their interactions
+ADONIS_TES<- vegan::adonis2(clr_dist_matrix ~ phyloseq::sample_data(GP_CLR)$Lot*phyloseq::sample_data(GP_CLR)$Time_cat, permutations = 9999)
+ADONIS_TES
+
+##Betadispersion test and plot
+dispr <- vegan::betadisper(clr_dist_matrix, phyloseq::sample_data(GP_CLR)$Lot_x_Time)
+dispr
+
+plot(dispr, main = "Ordination Centroids and Dispersion Labeled: Aitchison Distance", sub = "")
+boxplot(dispr, main = "", xlab = "")
+permutest(dispr)
+```
+
+
+```{r}
+##PCoA for no euclidean methods "UNIFRAC"
+#Generate distances
+ord_unifrac <- ordinate(GP_rare, method = "PCoA", distance = "wunifrac") 
+ord_unifrac_un <- ordinate(GP_rare, method = "PCoA", distance = "unifrac")
+ord_bray<- ordinate(GP_rare, method = "PCoA", distance = "bray")  
+
+GP_CLR@sam_data$Time_cat <- as.character(GP_CLR@sam_data$Time_cat)
+GP_rare@sam_data$Time_cat <- as.character(GP_rare@sam_data$Time_cat)
+
+##Plot ordinations
+a <- plot_ordination(GP_rare, ord_unifrac, color = "Lot", shape = "Time_cat") + geom_point(size = 2) +theme_classic()
+b <- plot_ordination(GP_rare, ord_unifrac_un, color = "Lot", shape = "Time_cat") + geom_point(size = 2)+theme_classic() 
+
+
+
+c1 <- plot_ordination(GP_rare, ord_bray, color = "Time_cat", shape = "Lot") + geom_point(size = 2)+theme_classic() 
+c1
+
+#cowplot::plot_grid(a, b,c, nrow = 1, ncol = 3, scale = .8, labels = c("Weighted", "Unweighted","Braycurtis"))
+
+
+```
+
+```{r}
+##ADONIS TEST FOR UNIFRAC TEST
+uwunifrac_dist<- phyloseq::distance(GP_rare, method="unifrac", weighted=F)
+wunifrac_dist <- phyloseq::distance(GP_rare, method="unifrac", weighted=T)
+bray_dist <- phyloseq::distance(GP_rare, method="bray", weighted=F)
+
+
+WUNIFRAC_adonis<- adonis2(wunifrac_dist ~ sample_data(GP_rare)$Lot*sample_data(GP_rare)$Time_cat, permutations = 9999)
+WUNIFRAC_adonis
+
+uWUNIFRAC_adonis<- adonis2(uwunifrac_dist ~ sample_data(GP_rare)$Lot*sample_data(GP_rare)$Time_cat, permutations = 9999)
+uWUNIFRAC_adonis
+
+bray_adonis<- adonis2(bray_dist ~ sample_data(GP_rare)$Lot*sample_data(GP_rare)$Time_cat, permutations = 9999)
+bray_adonis
+```
+
+```{r}
+#install.packages("remotes")
+#remotes::install_github("nuriamw/micro4all")
+#install_github("pmartinezarbizu/pairwiseAdonis/pairwiseAdonis")
+#library(pairwiseAdonis)
+#Load micro4all
+library(micro4all)
+
+pair_wise_beta<-PairwiseAdonisFun(
+  GP_rare,
+  distances = c("bray"),p.adjust.m="BH", formula = "Lot_x_Time", pval=0.05)
+```
+
+
+
+## V- OTU differential Abundance 
+
+Differential abundance test is a very important part in the microbial community data analysis (Nearing et al. 2022). It can be used to find the significant taxa in determining the community differences across groups. There are also several wrapped methods to better capture the important biomarkers, such as the combination of machine-learning and differential abundance test. Currently, trans_diff class have several famous approaches to perform this analysis: metastat(White, Nagarajan, and Pop 2009), LEfSe(Segata et al. 2011), RF (random forest + differential test), metagenomeSeq(Paulson et al. 2013), Kruskal-Wallis Rank Sum Test (for groups > 2), Wilcoxon Rank Sum Tests (for each paired group) and Dunn’s Kruskal-Wallis Multiple Comparisons (for paired group in cases groups > 2), t.test, ANOVA, ANCOMBC (Lin and Peddada 2020) and ALDEx2 (Fernandes et al. 2014).
+
+
+
+#II- Maaslin data
+```{r}
+#Prepare data pour analyse 
+#Donnée Générale
+df_input_metadata_All = read.table(file = "Metadata.txt", header = TRUE, sep = "\t", row.names = 1, stringsAsFactors = FALSE)
+df_input_data_FA = read.table(file = "Count_Phylum_Rumen.txt", header = TRUE, sep = "\t", row.names = 1, stringsAsFactors = FALSE)
+
+
+#metadata Rumen 
+df_input_metadata_rumen = subset(df_input_metadata_All, df_input_metadata_All$Localisation == "rumen")
+df_input_metadata_rumen_V2 = subset(df_input_metadata_rumen, df_input_metadata_rumen$MockAndDuplicates == "no")
+df_input_metadata_rumen_V2 <- df_input_metadata_rumen_V2 [ -3,]
+
+#Charactere
+#df_input_metadata_rumen_V2$Time_cat <- as.character(df_input_metadata_rumen_V2$Time_cat)
+#str(df_input_metadata_rumen_V2)
+
+#Metatdata_Lot
+df_input_metadata_rumen_dam = subset(df_input_metadata_rumen_V2, df_input_metadata_rumen_V2$Lot == "mere")
+df_input_metadata_rumen_mixed = subset(df_input_metadata_rumen_V2, df_input_metadata_rumen_V2$Lot == "panache")
+df_input_metadata_rumen_control = subset(df_input_metadata_rumen_V2, df_input_metadata_rumen_V2$Lot == "temoin")
+
+#metadata_Time
+df_input_metadata_T3 = subset(df_input_metadata_rumen_V2, df_input_metadata_rumen_V2$Time_cat == "3")
+df_input_metadata_T10 = subset(df_input_metadata_rumen_V2, df_input_metadata_rumen_V2$Time_cat == "10")
+df_input_metadata_T13 = subset(df_input_metadata_rumen_V2, df_input_metadata_rumen_V2$Time_cat == "13")
+df_input_metadata_T20 = subset(df_input_metadata_rumen_V2, df_input_metadata_rumen_V2$Time_cat == "20")
+
+
+
+#Microbiota_Phylum_Lot
+df_input_LotD = read.table(file = "Phylum_LotM.txt", header = TRUE, sep = "\t", row.names = 1, stringsAsFactors = FALSE)
+df_input_LotP = read.table(file = "Phylum_LotP.txt", header = TRUE, sep = "\t", row.names = 1, stringsAsFactors = FALSE)
+df_input_LotT = read.table(file = "Phylum_LotT.txt", header = TRUE, sep = "\t", row.names = 1, stringsAsFactors = FALSE)
+
+
+#Microbiota_Genus_Lot
+df_input_LotD_G = read.table(file = "Genus_LotM.txt", header = TRUE, sep = "\t", row.names = 1, stringsAsFactors = FALSE)
+df_input_LotP_G  = read.table(file = "Genus_LotP.txt", header = TRUE, sep = "\t", row.names = 1, stringsAsFactors = FALSE)
+df_input_LotT_G  = read.table(file = "Genus_LotT.txt", header = TRUE, sep = "\t", row.names = 1, stringsAsFactors = FALSE)
+
+#Microbiota_Genus_Time
+df_input_T3_G = read.table(file = "Genus_T3.txt", header = TRUE, sep = "\t", row.names = 1, stringsAsFactors = FALSE)
+df_input_T10_G = read.table(file = "Genus_T10.txt", header = TRUE, sep = "\t", row.names = 1, stringsAsFactors = FALSE)
+df_input_T13_G = read.table(file = "Genus_T13.txt", header = TRUE, sep = "\t", row.names = 1, stringsAsFactors = FALSE)
+df_input_T20_G = read.table(file = "Genus_T20.txt", header = TRUE, sep = "\t", row.names = 1, stringsAsFactors = FALSE)
+
+#Microbiota_Phylum_Time
+df_input_T3 = read.table(file = "Phylum_T3.txt", header = TRUE, sep = "\t", row.names = 1, stringsAsFactors = FALSE)
+df_input_T10 = read.table(file = "Phylum_T10.txt", header = TRUE, sep = "\t", row.names = 1, stringsAsFactors = FALSE)
+df_input_T13 = read.table(file = "Phylum_T13.txt", header = TRUE, sep = "\t", row.names = 1, stringsAsFactors = FALSE)
+df_input_T20 = read.table(file = "Phylum_T20.txt", header = TRUE, sep = "\t", row.names = 1, stringsAsFactors = FALSE)
+
+
+```
+
+
+## V- Veen diagram
+
+```{r}
+GP_ALL_TREE_13 <- GP_ALL_TREE %>% 
+  ps_filter(
+    Time_cat %in% c("13"))
+GP_ALL_TREE_10 <- GP_ALL_TREE %>% 
+  ps_filter(
+    Time_cat %in% c("10"))
+GP_ALL_TREE_3 <- GP_ALL_TREE %>% 
+  ps_filter(
+    Time_cat %in% c("3"))
+GP_ALL_TREE_20 <- GP_ALL_TREE %>% 
+  ps_filter(
+    Time_cat %in% c("20"))
+
+
+library(MicrobiotaProcess)
+library(VennDiagram)
+library(UpSetR)
+
+vennlist_20 <- get_vennlist(obj=GP_ALL_TREE_20, factorNames="Lot")
+upsetda_20 <- get_upset(obj=GP_ALL_TREE_20, factorNames="Lot")
+
+vennlist_10 <- get_vennlist(obj=GP_ALL_TREE_10, factorNames="Lot")
+upsetda_10 <- get_upset(obj=GP_ALL_TREE_20, factorNames="Lot")
+
+vennlist_13 <- get_vennlist(obj=GP_ALL_TREE_13, factorNames="Lot")
+upsetda_13 <- get_upset(obj=GP_ALL_TREE_20, factorNames="Lot")
+
+vennlist_3 <- get_vennlist(obj=GP_ALL_TREE_3, factorNames="Lot")
+upsetda_3 <- get_upset(obj=GP_ALL_TREE_20, factorNames="Lot")
+
+vennp_20<-venn.diagram(vennlist_20,
+                      height=5,
+                      width=5, 
+                      filename=NULL, 
+                      fill=c("#FFF0F5", "#7FFFD4","darkgoldenrod1"),
+                      cat.col=c("#FFF0F5", "#7FFFD4","darkgoldenrod1"),
+                      alpha = 0.85, 
+                      fontfamily = "serif",
+                      fontface = "bold",
+                      cex = 1.2,
+                      cat.cex = 1.3,
+                      cat.default.pos = "outer",
+                      cat.dist=0.1,
+                      margin = 0.1, 
+                      lwd = 3,
+                      lty ='dotted',
+                      imagetype = "svg")
+
+vennp_10<-venn.diagram(vennlist_10,
+                      height=5,
+                      width=5, 
+                      filename=NULL, 
+                      fill=c("#FFF0F5", "#7FFFD4","darkgoldenrod1"),
+                      cat.col=c("#FFF0F5", "#7FFFD4","darkgoldenrod1"),
+                      alpha = 0.85, 
+                      fontfamily = "serif",
+                      fontface = "bold",
+                      cex = 1.2,
+                      cat.cex = 1.3,
+                      cat.default.pos = "outer",
+                      cat.dist=0.1,
+                      margin = 0.1, 
+                      lwd = 3,
+                      lty ='dotted',
+                      imagetype = "svg")
+
+
+vennp_13<-venn.diagram(vennlist_13,
+                      height=5,
+                      width=5, 
+                      filename=NULL, 
+                      fill=c("#FFF0F5", "#7FFFD4","darkgoldenrod1"),
+                      cat.col=c("#FFF0F5", "#7FFFD4","darkgoldenrod1"),
+                      alpha = 0.85, 
+                      fontfamily = "serif",
+                      fontface = "bold",
+                      cex = 1.2,
+                      cat.cex = 1.3,
+                      cat.default.pos = "outer",
+                      cat.dist=0.1,
+                      margin = 0.1, 
+                      lwd = 3,
+                      lty ='dotted',
+                      imagetype = "svg")
+
+
+vennp_3<-venn.diagram(vennlist_3,
+                      height=5,
+                      width=5, 
+                      filename=NULL, 
+                      fill=c("#FFF0F5", "#7FFFD4","darkgoldenrod1"),
+                      cat.col=c("#FFF0F5", "#7FFFD4","darkgoldenrod1"),
+                      alpha = 0.85, 
+                      fontfamily = "serif",
+                      fontface = "bold",
+                      cex = 1.2,
+                      cat.cex = 1.3,
+                      cat.default.pos = "outer",
+                      cat.dist=0.1,
+                      margin = 0.1, 
+                      lwd = 3,
+                      lty ='dotted',
+                      imagetype = "svg")
+
+```
+
+upset(upsetda_20, sets=unique(as.vector(sample_data(GP_ALL_TREE_20)$Lot)), 
+      sets.bar.color = "#56B4E9",
+      order.by = "freq", 
+      empty.intersections = "on")
+
+```{r}
+print(vennlist_3)
+```
+
+
+# Linear discriminant analysis effect size (LEFSe)
+
+Linear discriminant analysis effect size (LEFSe)
+https://rpubs.com/mohsen/lefse_analysis_cleaned_prevalence_phyloseq
+
+```{r}
+library(lefser)
+library( microbiomeMarker)
+library(ggpubr)
+
+lef_3<-run_lefse(GP_ALL_TREE_3, group = "Lot",taxa_rank = "Genus", kw_cutoff = 0.05, wilcoxon_cutoff = 0.05, lda_cutoff = 2)
+lef_10<-run_lefse(GP_ALL_TREE_10, group = "Lot", taxa_rank = "Genus",kw_cutoff = 0.05, wilcoxon_cutoff = 0.05,lda_cutoff = 2)
+lef_13<-run_lefse(GP_ALL_TREE_13, group = "Lot",  taxa_rank = "Genus",kw_cutoff = 0.05, wilcoxon_cutoff = 0.05,lda_cutoff = 2)
+lef_20<-run_lefse(GP_ALL_TREE_20, group = "Lot",  taxa_rank = "Genus",kw_cutoff = 0.05, wilcoxon_cutoff = 0.05,lda_cutoff = 2)
+
+#dot plot
+LEFSE_3 <-plot_ef_dot(lef_3) 
+LEE_10 <-plot_ef_dot(lef_10) 
+LEFSE_13 <-plot_ef_dot(lef_13) 
+LEFSE_20 <-plot_ef_dot(lef_20)
+
+#barplot
+LEFSE_3 <-plot_ef_bar(lef_3) 
+LEE_10 <-plot_ef_bar(lef_10) 
+LEFSE_13 <-plot_ef_bar(lef_13) 
+LEFSE_20 <-plot_ef_bar(lef_20)
+
+
+ggarrange(LEFSE_3, LEE_10, LEFSE_13, LEFSE_20 + rremove("x.text"), 
+          labels = c("3", "10", "13","20"),
+          ncol = 2, nrow = 2)
+```
+
+```{r}
+library(tidyverse)
+library(phyloseq)
+library(microbiomeMarker)
+
+dat_3<-marker_table(lef_3) %>% data.frame() %>% select(1:4)
+dat_10<-marker_table(lef_10) %>% data.frame() %>% select(1:4)
+dat_13<-marker_table(lef_13) %>% data.frame() %>% select(1:4)
+dat_20<-marker_table(lef_20) %>% data.frame() %>% select(1:4)
+#LOAD Knitr
+dat_3 %>% kable(align = "c")
+dat_10 %>% kable(align = "c")
+dat_13 %>% kable(align = "c")
+dat_20 %>% kable(align = "c")
+
+#Change Phylum in Genus to have data
+
+
+lef_3_Phylum<-run_lefse(GP_ALL_TREE_T3, group = "Lot",taxa_rank = "Phylum", kw_cutoff = 0.05, wilcoxon_cutoff = 0.05, lda_cutoff = 2)
+lef_10_Phylum<-run_lefse(GP_ALL_TREE_T10, group = "Lot", taxa_rank = "Phylum",kw_cutoff = 0.05, wilcoxon_cutoff = 0.05,lda_cutoff = 2)
+lef_13_Phylum<-run_lefse(GP_ALL_TREE_T13, group = "Lot",  taxa_rank = "Phylum",kw_cutoff = 0.05, wilcoxon_cutoff = 0.05,lda_cutoff = 2)
+lef_20_Phylum<-run_lefse(GP_ALL_TREE_T20, group = "Lot",  taxa_rank = "Phylum",kw_cutoff = 0.05, wilcoxon_cutoff = 0.05,lda_cutoff = 2)
+
+LEFSE_3_Phylum <-plot_ef_bar(lef_3_Phylum) 
+LEE_10_Phylum <-plot_ef_bar(lef_10_Phylum) 
+LEFSE_13_Phylum <-plot_ef_bar(lef_13_Phylum) 
+LEFSE_20_Phylum <-plot_ef_bar(lef_20_Phylum)
+
+
+dat_3_Phylum<-marker_table(lef_3_Phylum) %>% data.frame() %>% select(1:4)
+dat_10_Phylum<-marker_table(lef_10_Phylum) %>% data.frame() %>% select(1:4)
+dat_13_Phylum<-marker_table(lef_13_Phylum) %>% data.frame() %>% select(1:4)
+dat_20_Phylum<-marker_table(lef_20_Phylum) %>% data.frame() %>% select(1:4)
+#LOAD Knitr
+dat_3_Phylum %>% kable(align = "c")
+dat_10_Phylum %>% kable(align = "c")
+dat_13_Phylum %>% kable(align = "c")
+dat_20_Phylum %>% kable(align = "c")
+```
+
+
+#II- Environnement
+```{r}
+library(readxl)
+
+#Data Env + Phylum
+df_input_metadata_env = read.table(file = "MD_env_VFA_Health.txt", header = TRUE, sep = "\t", row.names = NULL, stringsAsFactors = FALSE)
+df_input_data_FA_v = read.table(file = "Count_Phylum_Rumen.txt", header = TRUE, sep = "\t", row.names = NULL, stringsAsFactors = FALSE)
+
+#Genus
+df_input_data_Genus_v = read.table(file = "Count_Genus_Rumen.txt", header = TRUE, sep = "\t", row.names = NULL, stringsAsFactors = FALSE)
+
+All_G_META_All_2<-Genus_env [,-1:-20] # supp 
+
+All_G_META<- na.omit(All_G_META)
+com_All_G_META_All_2 = All_G_META_All_2[,22:44]
+env_All_G_META_All_2 = All_G_META_All_2[,1:21]
+m_com_All_G_META_All_2 = as.matrix(com_All_G_META_All_2)
+
+#nmds code
+set.seed(123)
+nmds_All_G_META_All_2 = metaMDS(m_com_All_G_META_All_2, distance = "bray")
+
+library(vegan)
+library(ggplot2)
+fit_T3_T13= envfit(nmds_All_G_META_All_2, env_All_G_META_All_2, permutations = 9999, na.rm = TRUE)
+
+
+#extract NMDS scores (x and y coordinates) for sites from newer versions of vegan package
+data.scoresnmds_All_G_META_All_2 = as.data.frame(scores(nmds_All_G_META_All_2)$sites)
+
+#add 'season' column as before
+data.scoresnmds_All_G_META_All_2$LT= All_G_META_All_2$Lot_x_Time
+
+en_coord_cont_T3_T13 = as.data.frame(scores(fit_T3_T13, "vectors")) * ordiArrowMul(fit_T3_T13)
+en_coord_cat_T3_T13= as.data.frame(scores(fit_T3_T13, "factors")) * ordiArrowMul(fit_T3_T13)
+
+ggO = ggplot(data = data.scoresnmds_All_G_META_All_2 , aes(x = NMDS1, y = NMDS2)) +  geom_point(data = data.scoresnmds_All_G_META_All_2, aes(colour = LT), size = 2, alpha = 0.5) + stat_ellipse()+ geom_point(data = data.scoresnmds_All_G_META_All_2, aes(colour = LT), size = 3, alpha = 0.5) + 
+     scale_colour_manual(values = c("orange", "steelblue","red"))  + 
+     geom_segment(aes(x = 0, y = 0, xend = NMDS1, yend = NMDS2), 
+       data = en_coord_cont, size =1, alpha = 0.5, colour = "grey30")  +geom_text(data = en_coord_cont, aes(x = NMDS1, y = NMDS2), colour = "grey30", 
+       fontface = "bold", label = row.names(en_coord_cont_T3_T13)) + theme(axis.title = element_text(size = 10, face = "bold", colour = "grey30"), 
+       panel.background = element_blank(), panel.border = element_rect(fill = NA, colour = "grey30"), 
+       axis.ticks = element_blank(), axis.text = element_blank(), legend.key = element_blank(), 
+       legend.title = element_text(size = 10, face = "bold", colour = "grey30"), 
+       legend.text = element_text(size = 9, colour = "grey30")) + 
+     labs(colour = "Lot")
+ggO
+
+```
+
+
+en_All_G_META_All_2.adj <- en_All_G_META_All_2 
+pvals.adj <- p.adjust (en_All_G_META_All_2$vectors$pvals, method = 'bonferroni')
+en_All_G_META_All_2.adj$vectors$pvals <- pvals.adj
+en_All_G_META_All_2.adj
+
+
+The envfit vectors and factors (blue) are overlaid on the original NMDS plot with samples as black points. The base R plot here is really difficult to read, easily overcrowded, and difficult to customize. I recommend using ggplot2 to make nicer looking plots.
+
+```{r}
+
+All_G_META_T13 <- subset(Genus_env, Genus_env$Time == "13")
+All_G_META_T13<- na.omit(All_G_META_T13)
+All_G_META_T13_2<-All_G_META_T13 [,-1:-6] # supp
+All_G_META_T13_2<-All_G_META_T13_2 [,-3] # supp 
+All_G_META_T13_2<-All_G_META_T13_2 [,-4:-5] # supp 
+All_G_META_T13_2<-All_G_META_T13_2 [,-3:-4] # supp 
+All_G_META_T13_2<-All_G_META_T13_2 [,-3:-9] # supp 
+All_G_META_T13_2<-All_G_META_T13_2 [,-15] # supp 
+view(All_G_META_T13_2)
+
+
+#Phylum
+com= All_G_META_T13_2[,15:37]
+env= All_G_META_T13_2[,1:14]
+m_com = as.matrix(com)
+nmds_T13 = metaMDS(m_com, distance = "bray")
+fit= envfit(nmds_T13, env, permutations = 9999, na.rm = TRUE)
+fit
+
+
+#Genus
+com= All_G_META_T13_2[,15:265]
+env= All_G_META_T13_2[,1:14]
+m_com = as.matrix(com)
+nmds_T13 = metaMDS(m_com, distance = "bray")
+fit= envfit(nmds_T13, env, permutations = 9999, na.rm = TRUE)
+fit
+
+
+# Get the NMDS scores
+#extract NMDS scores (x and y coordinates) for sites from newer versions of vegan package
+data.scores = as.data.frame(scores(nmds_T13)$sites)
+
+#add 'season' column as before
+data.scores$LT= All_G_META_T13$Lot
+
+en_coord_cont = as.data.frame(scores(fit, "vectors")) * ordiArrowMul(fit)
+en_coord_cat= as.data.frame(scores(fit, "factors")) * ordiArrowMul(fit)
+
+gg = ggplot(data = data.scores , aes(x = NMDS1, y = NMDS2)) +  geom_point(data = data.scores, aes(colour = LT), size = 2, alpha = 0.5) +  geom_point(data = data.scores, aes(colour = LT), size = 2, alpha = 0.5) + 
+     scale_colour_manual(values = c("orange", "steelblue","red"))  + 
+     geom_segment(aes(x = 0, y = 0, xend = NMDS1, yend = NMDS2), 
+       data = en_coord_cont, size =1, alpha = 0.05, colour = "grey30")  +geom_text(data = en_coord_cont, aes(x = NMDS1, y = NMDS2), colour = "grey30",
+       fontface = "bold", label = row.names(en_coord_cont)) +  theme(axis.title = element_text(size = 6, face = "bold", colour = "grey30"), 
+       panel.background = element_blank(), panel.border = element_rect(fill = NA, colour = "grey30"), 
+       axis.ticks = element_blank(), axis.text = element_blank(), legend.key = element_blank(), 
+       legend.title = element_text(size = 10, face = "bold", colour = "grey30"), 
+       legend.text = element_text(size = 9, colour = "grey30")) + 
+     labs(colour = "Lot")
+gg
+```
+
+
+
+```{r}
+library (vegan)
+spe.log <- log1p (com)  # species data are in percentage scale which is strongly rightskewed, better to transform them
+spe.hell <- decostand (spe.log, 'hell')  # we are planning to do tb-RDA, this is Hellinger pre-transformation
+tbRDA <- rda (spe.hell ~ VFAt_propionate + VFA_totaux, data = env)  # calculate tb-RDA with two explanatory variables
+tbRDA
+
+type_num <- as.numeric (as.factor (All_G_META_T13$Lot))
+
+dune.spp.fit <- envfit(nmds_T13, com, permutations = 999)
+head(dune.spp.fit)
+dune.spp.fit
+
+ordiplot (nmds_T13, type = 'n', main = "Weeks 13")
+points (nmds_T13, display = 'sites', col = type_num, pch = type_num)
+legend ('topright', col = 1:3, pch = 1:3, legend = levels (as.factor (All_G_META_T13$Lot)))
+plot (fit, p.max = 0.05) 
+#plot(dune.spp.fit, p.max = 0.01, col = "black", cex = 0.7) # change the significance level of species shown with p.max
+```
+
+The one variables explain... of the variance 
+
+
+
+```{r}
+GP_ALL_TREE@sam_data$Time_cat <- as.character(GP_ALL_TREE@sam_data$Time_cat)
+GP_ALL_TREE_Na <- na.omit(GP_ALL_TREE)
+GP_ALL_fix<- GP_ALL_TREE_Na %>% tax_fix(unknowns = c("uncultured"))
+GP_ALL_fix %>%
+  tax_transform(trans="clr", rank = "Genus") %>%
+  # when no distance matrix or constraints are supplied, PCA is the default/auto ordination method
+  ord_calc(method = "PCA") %>%
+  ord_plot(color = "Time_cat", shape = "Lot", plot_taxa = 1:5, size = 2, anno_colour = "Lot") +
+  scale_colour_brewer(palette = "Dark2")
+```
+
+```{r}
+GP_ALL_fix %>%
+  ps_mutate(
+    Ho = as.numeric(Race == "Ho"),
+    sexe_F = as.numeric(Sexe == "F"),
+    sexe_MF = as.numeric(Sexe == "M-Fem"),
+    Acetate = as.numeric(Acetate == "Acetate")
+  ) %>%
+  tax_transform("clr", rank = "Genus") %>%
+  ord_calc(
+    constraints = c("sexe_F", "Ho","sexe_MF","Acetate"),
+    # method = "RDA", # Note: you can specify RDA explicitly, and it is good practice to do so, but microViz can guess automatically that you want an RDA here (helpful if you don't remember the name?)
+    scale_cc = FALSE # doesn't make a difference
+  ) %>%
+  ord_plot(
+    colour = "Lot", size = 2, alpha = 0.5, shape = "Time_cat",
+    plot_taxa = 1:8
+  )
+```
+
+
+
