@@ -1,0 +1,308 @@
+---
+title: "AGV_AQ_Volame3"
+output: html_notebook
+---
+
+```{r}
+#I- Lirbrary 
+library(ggplot2)
+library(ggpubr)
+library(readxl)
+library(gtsummary)
+library(tidyverse)
+library(ggpubr)
+library(rstatix)
+
+#II- Lecture des données brutes
+volameAGV <- read_excel("AGV_DOA.xlsx")
+View(volameAGV)
+```
+
+
+```{r}
+#Boxplot des proportion des AGV 
+
+volameAGV$Time<-as.character(volameAGV$Time)
+
+Totaux_t <- ggplot(volameAGV, aes(x=factor(Time, level=c('3', '10', '13')), y= `Total VFA (  )`, fill=Groups)) + 
+    geom_boxplot() + theme_classic() +xlab('Weeks of age')
+
+Pro_t <- ggplot(volameAGV, aes(x=factor(Time, level=c('3', '10', '13')), y= `Propionate (%)`, fill=Groups)) + 
+    geom_boxplot() + theme_classic() +xlab('Weeks of age')
+
+Ac_t <- ggplot(volameAGV, aes(x=factor(Time, level=c('3', '10', '13')), y= `Acetate (%)`, fill=Groups)) + 
+    geom_boxplot()+ theme_classic() +xlab('Weeks of age')
+
+Buty_t <- ggplot(volameAGV, aes(x=factor(Time, level=c('3', '10', '13')), y=`Butyrate (%)` , fill=Groups)) + 
+    geom_boxplot() +theme_classic() +xlab('Weeks of age')
+
+isoButy_t <- ggplot(volameAGV, aes(x=factor(Time, level=c('3', '10', '13')), y= `Isobutyrate (%)` , fill=Groups)) + 
+    geom_boxplot() +theme_classic() +xlab('Weeks of age')
+
+isoval_t <- ggplot(volameAGV, aes(x=factor(Time, level=c('3', '10', '13')), y= `Isovalerate (%)`, fill=Groups)) + 
+    geom_boxplot() +theme_classic() + xlab('Weeks of age')
+
+
+val_t <- ggplot(volameAGV, aes(x=factor(Time, level=c('3', '10', '13')), y= `Valerate (%)`, fill=Groups)) + 
+    geom_boxplot()+  theme_classic() +xlab('Weeks of age')
+
+capro_t <- ggplot(volameAGV, aes(x=factor(Time, level=c('3', '10', '13')), y= `Caproate (%)`, fill=Groups)) + 
+    geom_boxplot()+  theme_classic() +xlab('Weeks of age')
+
+
+cowplot::plot_grid(Totaux_t, Ac_t,Pro_t ,Buty_t,isoButy_t,val_t,isoval_t,capro_t, nrow = 4, ncol = 2, scale = .8)
+
+```
+
+
+
+```{r}
+#Table moyenne des donnée + SD
+sumVFAtoto<- volameAGV %>%
+  group_by(Time, Groups) %>%
+  get_summary_stats(`Total VFA (  )` ,`Acetate (%)`,`Butyrate (%)`,`Propionate (%)`,`Isovalerate (%)`, `Caproate (%)`,`Isovalerate (%)`,`Isobutyrate (%)`, type = "mean_sd")
+
+sumVFAtoto
+```
+
+
+
+The repeated-measures ANOVA is used for analyzing data where same subjects are measured more than once. This test is also referred to as a within-subjects ANOVA or ANOVA with repeated measures. The “within-subjects” term means that the same individuals are measured on the same outcome variable under different time points or conditions.
+
+
+
+
+Assumption
+```{r}
+colnames(volameAGV)[9] ="VFA_t"
+colnames(volameAGV)[10] ="VFA_Acetate"
+colnames(volameAGV)[11] ="VFA_propionate"
+colnames(volameAGV)[12] ="VFA_isobutyrate"
+colnames(volameAGV)[13] ="VFA_butyrate"
+colnames(volameAGV)[14] ="VFA_isovalerate"
+colnames(volameAGV)[15] ="VFA_valerate"
+colnames(volameAGV)[16] ="VFA_caproate"
+
+#Outliers
+volameAGV %>%
+  group_by(Time, Groups) %>%
+  identify_outliers(VFA_caproate)
+
+# Normality 
+ggplot (data = volameAGV, aes (sample = VFA_caproate )) +
+  stat_qq ()
+volameAGV %>%
+  group_by(Groups, Time) %>%
+  shapiro_test(VFA_caproate)
+
+##Createqqplot for each cell of design
+ggqqplot(volameAGV, "VFA_caproate", ggtheme = theme_bw()) +
+  facet_grid(Time ~ Groups, labeller = "label_both")
+```
+The score was normally distributed at each time point (p > 0.05), except for ctr treatment at t1, as assessed by Shapiro-Wilk’s test+ Plus la courbe est rectiligne, plus cela signifie que les quantiles de la variable sont similaires à ceux de la distribution attendue. 
+
+VFAtotaux :ok 
+
+From the plot above, as all the points fall approximately along the reference line, we can assume normality.
+```{r}
+###Kurskall wallis test between groups
+kruskal.test(VFA_t ~ Time, data = volameAGV)
+kruskal.test(VFA_Acetate ~ Time, data = volameAGV)   
+kruskal.test(VFA_propionate ~ Time, data = volameAGV)
+kruskal.test(VFA_isobutyrate ~ Time, data = volameAGV)
+kruskal.test(VFA_butyrate ~ Time, data = volameAGV)
+kruskal.test(VFA_isovalerate ~ Time, data = volameAGV)   
+kruskal.test(VFA_valerate ~ Time, data = volameAGV)
+kruskal.test(VFA_caproate ~ Time, data = volameAGV)
+
+kruskal.test(VFA_t ~ Groups, data = volameAGV)
+kruskal.test(VFA_Acetate ~ Groups, data = volameAGV)   
+kruskal.test(VFA_propionate ~ Groups, data = volameAGV)
+kruskal.test(VFA_isobutyrate ~ Groups, data = volameAGV)
+kruskal.test(VFA_butyrate ~ Groups, data = volameAGV)
+kruskal.test(VFA_isovalerate ~ Groups, data = volameAGV)   
+kruskal.test(VFA_valerate ~ Groups, data = volameAGV)
+kruskal.test(VFA_caproate ~ Groups, data = volameAGV)
+
+kruskal.test(VFA_t ~ Lot_x_Time, data = volameAGV)
+kruskal.test(VFA_Acetate ~ Lot_x_Time, data = volameAGV)   
+kruskal.test(VFA_propionate ~ Lot_x_Time, data = volameAGV)
+kruskal.test(VFA_isobutyrate ~ Lot_x_Time, data = volameAGV)
+kruskal.test(VFA_butyrate ~ Lot_x_Time, data = volameAGV)
+kruskal.test(VFA_isovalerate ~ Lot_x_Time, data = volameAGV)   
+kruskal.test(VFA_valerate ~ Lot_x_Time, data = volameAGV)
+kruskal.test(VFA_caproate ~ Lot_x_Time, data = volameAGV)
+
+
+#From the output of the Kruskal-Wallis test, we know that there is a significant difference between groups, but we don’t know which pairs of groups are different. A significant Kruskal-Wallis test is generally followed up by Dunn’s test to identify which groups are different. It’s also possible to use the Wilcoxon’s test to calculate pairwise comparisons between group levels with corrections for multiple testing.
+
+###Pairwise
+pairwise.wilcox.test(volameAGV$VFA_t, volameAGV$Lot_x_Time,p.adjust.method = "BH")
+pairwise.wilcox.test(volameAGV$VFA_Acetate, volameAGV$Lot_x_Time,p.adjust.method = "BH")
+pairwise.wilcox.test(volameAGV$VFA_propionate , volameAGV$Lot_x_Time,p.adjust.method = "BH")
+pairwise.wilcox.test(volameAGV$VFA_isobutyrate, volameAGV$Lot_x_Time,p.adjust.method = "BH")
+pairwise.wilcox.test(volameAGV$VFA_butyrate, volameAGV$Lot_x_Time,p.adjust.method = "BH")
+pairwise.wilcox.test(volameAGV$VFA_isovalerate, volameAGV$Lot_x_Time,p.adjust.method = "BH")
+pairwise.wilcox.test(volameAGV$VFA_valerate , volameAGV$Lot_x_Time,p.adjust.method = "BH")
+pairwise.wilcox.test(volameAGV$VFA_caproate, volameAGV$Lot_x_Time,p.adjust.method = "BH")
+```
+ 
+Caproate/ valertae : pas ok sur normalité (qqplot + test), mais ggqqplot good 
+```{r}
+library(tidyverse)
+library(ggpubr)
+library(rstatix)
+
+res.aov_to <-volameAGV %>% anova_test(dv = VFA_totaux, wid = EDE, within = Time, between =groups)
+get_anova_table(res.aov_to)
+
+res.aov_to <-volameAGV %>% anova_test(dv = VFAt_Acetate, wid = EDE, within = Time, between =groups)
+get_anova_table(res.aov_to)
+
+
+res.aov_to <-volameAGV %>% anova_test(dv = VFAt_caproate, wid = EDE, within = Time, between =groups)
+get_anova_table(res.aov_to)
+
+
+res.aov_to <-volameAGV %>% anova_test(dv = VFAt_propionate, wid = EDE, within = Time, between =groups)
+get_anova_table(res.aov_to)
+
+
+res.aov_to <-volameAGV %>% anova_test(dv = VFAt_isobutyrate, wid = EDE, within = Time, between =groups)
+get_anova_table(res.aov_to)
+
+
+res.aov_to <-volameAGV %>% anova_test(dv = VFAt_valerate, wid = EDE, within = Time, between =groups)
+get_anova_table(res.aov_to)
+
+
+res.aov_to <-volameAGV %>% anova_test(dv = VFAt_isovalerate, wid = EDE, within = Time, between =groups)
+get_anova_table(res.aov_to)
+
+res.aov_to <-volameAGV %>% anova_test(dv = VFAt_butyrate, wid = EDE, within = Time, between =groups)
+get_anova_table(res.aov_to)
+
+```
+
+
+```{r}
+#Post hoc # comparaisons par paires
+#volameAGV<-na.omit(volameAGV)
+
+pair<-volameAGV %>% 
+pairwise_t_test( VFA_totaux~Lot_x_Time, p.adjust.method = "bonferroni" ) 
+data.frame(pair) 
+
+pair_propionate<-volameAGV %>% 
+pairwise_t_test( VFAt_propionate~Lot_x_Time, p.adjust.method = "bonferroni" ) 
+data.frame(pair_propionate) 
+
+pair
+
+pair_propionate
+
+#Procedure for a significant two-way interaction 
+#VFAtoto + VFA propionate
+
+#VFAtoto
+# Effect of treatment at each time point
+one.way <- volameAGV %>%
+  group_by(Time) %>%
+  anova_test(dv = VFA_totaux, wid = EDE, between = groups) %>%
+  get_anova_table() %>%
+  adjust_pvalue(method = "bonferroni")
+one.way
+
+# Pairwise comparisons between treatment groups
+pwc <- volameAGV %>%
+  group_by(Time) %>%
+  pairwise_t_test(
+    VFA_totaux ~ groups, paired = TRUE,
+    p.adjust.method = "bonferroni"
+    )
+pwc
+
+```
+
+Considering the Bonferroni adjusted p-value (p.adj), it can be seen that the simple main effect of treatment was not significant at the time point t3 and t13 (p = 1). It becomes significant at t10.
+
+
+Pairwise comparisons show that the mean VFAtt score was significantly different between DAm and Mixed at t10 (p = 0.011) and Mixed ocntrol (p = 0.006) 
+
+```{r}
+
+#VFA propionate
+
+# Effect of treatment at each time point
+one.way <- volameAGV %>%
+  group_by(Time) %>%
+  anova_test(dv = VFAt_propionate, wid = EDE, between = groups) %>%
+  get_anova_table() %>%
+  adjust_pvalue(method = "bonferroni")
+one.way
+
+# Pairwise comparisons between treatment groups
+pwc <- volameAGV %>%
+  group_by(Time) %>%
+  pairwise_t_test(
+    VFAt_propionate ~ groups, paired = TRUE,
+    p.adjust.method = "bonferroni"
+    )
+pwc
+```
+Considering the Bonferroni adjusted p-value (p.adj), it can be seen that the simple main effect of treatment was not significant at the time point t3 (p = 1). It becomes significant at t13 +10 
+
+
+Pairwise comparisons show that the mean VFAtt score was significantly different between control and Mixed at t10 (p = 0.014) and 13 : Dam vs Mixed  (p = 0.007) 
+
+
+MANOVA 
+
+Assumptions and preleminary tests
+
+```{r}
+
+#Multivariate normality
+volameAGV %>%
+  select(VFA_totaux, VFAt_Acetate,VFAt_butyrate,VFAt_caproate, VFAt_isovalerate,VFAt_isobutyrate, VFAt_valerate,VFAt_propionate) %>%
+  mshapiro_test()
+
+#Identify multicollinearity
+volameAGV %>% cor_test(VFA_totaux, VFAt_Acetate)
+
+#lineratuty
+# Create a scatterplot matrix by group
+library(GGally)
+results <- volameAGV %>%
+  select(VFA_totaux, VFAt_Acetate,VFAt_butyrate,VFAt_caproate, VFAt_isovalerate,VFAt_isobutyrate, VFAt_valerate,VFAt_propionate, Lot_x_Time) %>%
+  group_by(Lot_x_Time) %>%
+  doo(~ggpairs(.) + theme_bw(), result = "plots")
+results
+# Show the plots
+results$plots
+
+#Check the homogeneity of covariances assumption
+box_m(volameAGV[, c("VFA_totaux", "VFAt_Acetate","VFAt_butyrate","VFAt_caproate", "VFAt_isovalerate","VFAt_isobutyrate", "VFAt_valerate","VFAt_propionate")], volameAGV$Lot_x_Time)
+
+#Check the homogneity of variance assumption
+volameAGV %>% 
+  gather(key = "variable", value = "value", VFA_totaux, VFAt_Acetate,VFAt_butyrate,VFAt_caproate, VFAt_isovalerate,VFAt_isobutyrate, VFAt_valerate,VFAt_propionate) %>%
+  group_by(variable) %>%
+  levene_test(value ~ Lot_x_Time)
+```
+
+```{r}
+library(tidyverse)
+library(ggpubr)
+library(rstatix)
+library(car)
+library(broom)
+# MANOVA test
+res.man <- manova(cbind(VFA_totaux, VFAt_Acetate,VFAt_butyrate,VFAt_caproate, VFAt_isovalerate,VFAt_isobutyrate, VFAt_valerate,VFAt_propionate) ~ Time*Lot, data = volameAGV)
+
+summary(res.man,tol=0)
+
+summary.aov(res.man)
+
+```
+
